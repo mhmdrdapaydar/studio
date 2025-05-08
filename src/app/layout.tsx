@@ -1,17 +1,14 @@
 import type { Metadata } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
+import { Inter } from 'next/font/google'; // Changed from Geist to Inter
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 
-const geistSans = Geist({
-  variable: '--font-geist-sans',
+const inter = Inter({ // Changed from geistSans to inter
+  variable: '--font-sans', // Changed variable name for consistency
   subsets: ['latin'],
 });
 
-const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
-  subsets: ['latin'],
-});
+// Removed geistMono as Inter can cover mono-like needs or a specific mono font can be added if needed
 
 export const metadata: Metadata = {
   title: 'UnblockMe',
@@ -25,7 +22,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body className={`${inter.variable} font-sans antialiased`}> {/* Apply Inter font class */}
         {children}
         <Toaster />
       </body>
