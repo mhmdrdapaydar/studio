@@ -7,22 +7,18 @@ function sendJsonResponse($data, $httpStatusCode = 200) {
     $jsonOutput = json_encode($data);
 
     if ($jsonOutput === false) {
-        // json_encode failed. This can happen with non-UTF8 strings or recursion.
         $jsonLastErrorMsg = json_last_error_msg();
-        // Attempt to log the error server-side if possible (requires appropriate permissions and setup)
         // error_log('json_encode error in proxy.php: ' . $jsonLastErrorMsg . ' | Data keys: ' . implode(', ', array_keys($data)));
-
-        // Fallback to a generic JSON error response
         $errorData = [
             'success' => false,
             'error' => 'Server-side JSON encoding error. ' . ($jsonLastErrorMsg ?: 'Unknown encoding error.'),
-            'statusCode' => 500, // Internal server error
+            'statusCode' => 500,
             'finalUrl' => isset($data['rawFinalUrl']) ? htmlspecialchars($data['rawFinalUrl']) : (isset($data['finalUrl']) ? htmlspecialchars($data['finalUrl']) : ''),
             'rawFinalUrl' => isset($data['rawFinalUrl']) ? $data['rawFinalUrl'] : (isset($data['finalUrl']) ? $data['finalUrl'] : ''),
-            'content' => null // Ensure content is null or empty
+            'content' => null
         ];
         $jsonOutput = json_encode($errorData);
-        $httpStatusCode = 500; // Ensure status code reflects the new error
+        $httpStatusCode = 500;
     }
 
     if (!headers_sent()) {
@@ -35,16 +31,14 @@ function sendJsonResponse($data, $httpStatusCode = 200) {
 
 // Helper function to make a URL absolute
 function make_absolute($url, $base_url) {
-    if (empty(trim($url))) return $base_url; // If URL is empty, return base
+    if (empty(trim($url))) return $base_url;
     
-    // Check if URL is already absolute (has a scheme) or is a data/mailto/tel URI
     if (preg_match('~^(?:[a-z][a-z0-9+-.]*:|data:|mailto:|tel:)~i', $url)) {
         return $url;
     }
 
     $base = parse_url($base_url);
     if (empty($base['scheme']) || empty($base['host'])) {
-        // Try to fix base_url if it's schemeless like "example.com/path"
         if (strpos($base_url, '//') === 0) {
              $base_url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http') . ':' . $base_url;
              $base = parse_url($base_url);
@@ -53,12 +47,10 @@ function make_absolute($url, $base_url) {
              $base = parse_url($base_url);
         }
         if (empty($base['scheme']) || empty($base['host'])) {
-           return $url; // Invalid base URL, cannot resolve reliably
+           return $url; 
         }
     }
 
-
-    // If URL is scheme-relative (e.g., //example.com/path)
     if (substr($url, 0, 2) === '//') {
         return $base['scheme'] . ':' . $url;
     }
@@ -68,49 +60,47 @@ function make_absolute($url, $base_url) {
         $path_prefix .= ':' . $base['port'];
     }
 
-    if ($url[0] === '#') { // Anchor link on the same page
-        return rtrim($base_url, '#?') . $url; // Append fragment to base_url (potentially without its own fragment/query)
+    if ($url[0] === '#') {
+        return rtrim($base_url, '#?') . $url;
     }
     
-    if ($url[0] === '?') { // Query string on the same page
-        $base_url_no_query = strtok($base_url, '?'); // Remove existing query string from base_url
-        return rtrim($base_url_no_query, '/') . $url; // Append new query string
+    if ($url[0] === '?') {
+        $base_url_no_query = strtok($base_url, '?');
+        return rtrim($base_url_no_query, '/') . $url;
     }
-
-    $base_path_dir = '';
+    
+    $base_path_dir_segment = '';
     if (isset($base['path'])) {
         if (substr($base['path'], -1) === '/' || $base['path'] === '/') {
-            $base_path_dir = $base['path'];
+            $base_path_dir_segment = $base['path'];
         } else {
-            $base_path_dir = dirname($base['path']);
+            $base_path_dir_segment = dirname($base['path']);
         }
     }
     
-    if ($base_path_dir === '.' || $base_path_dir === '') {
-        $base_path_dir = '/';
+    if ($base_path_dir_segment === '.' || $base_path_dir_segment === '' || $base_path_dir_segment === '\\') {
+        $base_path_dir_segment = '/';
     } else {
-        if ($base_path_dir[0] !== '/') $base_path_dir = '/' . $base_path_dir;
-        if (substr($base_path_dir, -1) !== '/') $base_path_dir .= '/';
+        if ($base_path_dir_segment[0] !== '/') $base_path_dir_segment = '/' . $base_path_dir_segment;
+        if (substr($base_path_dir_segment, -1) !== '/') $base_path_dir_segment .= '/';
     }
     
-
     $absolute_path = '';
-    if ($url[0] === '/') { // URL is root-relative
+    if ($url[0] === '/') {
         $absolute_path = $url;
-    } else { // URL is relative to the base path directory
-        $absolute_path = $base_path_dir . $url;
+    } else {
+        $absolute_path = $base_path_dir_segment . $url;
     }
 
-    // Normalize the path (resolve ../ and ./)
     $parts = [];
     $path_to_explode = $absolute_path === '/' ? '' : ltrim($absolute_path, '/');
 
     foreach (explode('/', $path_to_explode) as $part) {
-        if ($part === '.' || ($part === '' && !empty($parts))) { // Skip empty parts unless it's the first part of an absolute path that became empty
+        if ($part === '.' || ($part === '' && !empty($parts))) {
             continue;
         }
         if ($part === '..') {
-            if (!empty($parts)) { // Only pop if there's something to pop
+            if (!empty($parts)) {
                  array_pop($parts);
             }
         } else {
@@ -118,11 +108,9 @@ function make_absolute($url, $base_url) {
         }
     }
     $normalized_path = '/' . implode('/', $parts);
-     // If original $absolute_path was just "/" and $parts became empty, ensure $normalized_path is "/"
     if ($absolute_path === '/' && empty($parts)) {
         $normalized_path = '/';
     }
-
 
     $final_absolute_url = $path_prefix . $normalized_path;
     
@@ -133,17 +121,24 @@ function make_absolute($url, $base_url) {
     return $final_absolute_url;
 }
 
+function get_proxy_url_prefix() {
+    $scheme = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http";
+    $host = $_SERVER['HTTP_HOST'];
+    $script_name = $_SERVER['SCRIPT_NAME'];
+    // Construct the base path of the proxy script itself
+    return htmlspecialchars($scheme . "://" . $host . $script_name . "?url=", ENT_QUOTES, 'UTF-8');
+}
 
-// Check if cURL is available
+
 if (!function_exists('curl_init')) {
     sendJsonResponse([
         'success' => false, 
         'error' => 'cURL extension is not installed or enabled on the server. This script requires cURL to function.',
-        'finalUrl' => '', // URL not known yet
-        'rawFinalUrl' => '', // URL not known yet
-        'statusCode' => 500, // Custom status code for this specific server configuration issue
+        'finalUrl' => '', 
+        'rawFinalUrl' => '', 
+        'statusCode' => 500, 
         'content' => null
-    ], 500); // Internal Server Error
+    ], 500);
 }
 
 $url = isset($_GET['url']) ? trim($_GET['url']) : '';
@@ -152,7 +147,6 @@ if (empty($url)) {
     sendJsonResponse(['success' => false, 'error' => 'URL cannot be empty.', 'finalUrl' => '', 'rawFinalUrl' => '', 'content' => null, 'statusCode' => 400], 400);
 }
 
-// Add https:// if no scheme is present
 if (!preg_match("~^(?:f|ht)tps?://~i", $url)) {
     $url = "https://".$url;
 }
@@ -161,36 +155,38 @@ if (!filter_var($url, FILTER_VALIDATE_URL)) {
     sendJsonResponse(['success' => false, 'error' => 'Invalid URL format: ' . htmlspecialchars($url), 'finalUrl' => htmlspecialchars($url), 'rawFinalUrl' => $url, 'content' => null, 'statusCode' => 400], 400);
 }
 
-// --- Cookie Handling ---
-$cookieFile = null; // Initialize to null
+$cookieFile = null; 
 if (is_writable(sys_get_temp_dir())) {
     $cookieFile = tempnam(sys_get_temp_dir(), 'unblockme_cookie_');
 }
 
-if ($cookieFile === false || $cookieFile === null) { // tempnam returns false on error
-    // Don't send error, proceed without cookie jar if tempnam fails, but log it server-side if possible
+if ($cookieFile === false || $cookieFile === null) { 
     // error_log("Warning: Failed to create temporary cookie file in proxy.php. Proceeding without cookie persistence.");
-    $cookieFile = null; // Ensure it's null if failed
+    $cookieFile = null; 
 } else {
-    // Register a shutdown function to clean up the cookie file ONLY if it was created
     register_shutdown_function(function() use ($cookieFile) {
         if ($cookieFile && file_exists($cookieFile)) {
             unlink($cookieFile);
         }
     });
 }
-// --- End Cookie Handling ---
 
 $ch = curl_init();
 curl_setopt($ch, CURLOPT_URL, $url);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true); 
 curl_setopt($ch, CURLOPT_MAXREDIRS, 10);
-curl_setopt($ch, CURLOPT_TIMEOUT, 45); 
-curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/98.0.4758.102 Safari/537.36 UnblockMeProxy/1.0'); 
+curl_setopt($ch, CURLOPT_TIMEOUT, 60); // Increased timeout
+curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36 UnblockMeProxy/1.1'); 
 curl_setopt($ch, CURLOPT_ENCODING, ""); 
+// Attempt to set preferred TLS version. TLS 1.2 is widely supported.
+// Some servers might require TLS 1.3, some older ones might need TLS 1.1 (less secure).
+// CURL_SSLVERSION_TLSv1_2 is 6.
+if (defined('CURL_SSLVERSION_TLSv1_2')) {
+    curl_setopt($ch, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2);
+}
 
-// --- Enhanced HTTP Headers ---
+
 $requestHeaders = [
     'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
     'Accept-Language: en-US,en;q=0.9',
@@ -200,28 +196,22 @@ $requestHeaders = [
 $urlParts = parse_url($url);
 if (isset($urlParts['scheme']) && isset($urlParts['host'])) {
     $referer = $urlParts['scheme'] . '://' . $urlParts['host'] . '/';
-    // Add Origin header, often needed
     $requestHeaders[] = 'Origin: ' . $urlParts['scheme'] . '://' . $urlParts['host'];
 } else {
-    $referer = $url; // Fallback referer
+    $referer = $url; 
 }
 $requestHeaders[] = 'Referer: ' . $referer;
 
 curl_setopt($ch, CURLOPT_HTTPHEADER, $requestHeaders);
-// --- End Enhanced HTTP Headers ---
 
-// --- Cookie Jar Setup ---
-if ($cookieFile) { // Only set cookie jar if file was successfully created
+if ($cookieFile) { 
     curl_setopt($ch, CURLOPT_COOKIEJAR, $cookieFile); 
     curl_setopt($ch, CURLOPT_COOKIEFILE, $cookieFile);
 }
-// --- End Cookie Jar Setup ---
 
 curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true); 
 curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2); 
-// To use a specific CA bundle:
 // curl_setopt($ch, CURLOPT_CAINFO, '/path/to/your/cacert.pem');
-
 
 $content = curl_exec($ch);
 $statusCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -234,11 +224,11 @@ if ($curlError) {
     sendJsonResponse([
         'success' => false, 
         'error' => 'cURL Error: ' . htmlspecialchars($curlError), 
-        'statusCode' => $statusCode ?: 503, // Use 503 if status code is 0 (network error)
+        'statusCode' => $statusCode ?: 503, 
         'finalUrl' => htmlspecialchars($finalUrl),
         'rawFinalUrl' => $finalUrl,
         'content' => null
-    ], $statusCode ?: 503); // Use a server error code if status is 0
+    ], $statusCode ?: 503); 
 }
 
 if ($statusCode >= 200 && $statusCode < 400) {
@@ -252,97 +242,142 @@ if ($statusCode >= 200 && $statusCode < 400) {
                 $content = preg_replace('/(<head\b[^>]*>)/i', '$1'.$baseHref, $content, 1);
             }
         } else {
+            // If no <head>, prepend base tag. This might not be ideal but is a fallback.
             $content = $baseHref . $content;
         }
 
+        // Remove CSP, integrity, and nonce attributes which can interfere with proxying
         $content = preg_replace('/<meta http-equiv=["\']Content-Security-Policy["\'][^>]*>/i', '', $content);
         $content = preg_replace('/\s+integrity\s*=\s*([\'"])[^\'"]*\1/i', '', $content);
-        // This regex for link integrity was problematic and could remove whole link tags. Improved:
         $content = preg_replace_callback('/<link([^>]*)integrity=([\'"])[^\'"]*\2([^>]*)>/is', function($matches) {
             return '<link' . $matches[1] . $matches[3] . '>';
         }, $content);
-        // Remove 'nonce' attributes from script tags
         $content = preg_replace('/\s+nonce\s*=\s*([\'"])[^\'"]*\1/i', '', $content);
-        // Attempt to disable service workers by removing their registration script patterns
         $content = preg_replace('/navigator\.serviceWorker\s*\.\s*register\s*\(([^)]+)\)/i', 'console.warn("ServiceWorker registration blocked by proxy: $1")', $content);
 
+        $proxyUrlPrefix = get_proxy_url_prefix();
 
-        $attributesToRewrite = ['src', 'href', 'action', 'data-src', 'poster', 'background', 'data-url', 'data-href']; 
-
+        // Rewrite attributes in HTML tags
+        $attributesToRewrite = ['src', 'href', 'action', 'data-src', 'poster', 'background', 'data-url', 'data-href', 'srcset']; 
         foreach ($attributesToRewrite as $attr) {
-            $pattern = '/(<[^>]+' . preg_quote($attr, '/') . '\s*=\s*)([\'"]?)([^"\'\s#<>][^"\'\s<>]*|[^"\'\s<>]*\?[^"\'\s<>]*|[^"\'\s<>]*#[^"\'\s<>]*)([\'"]?)/i';
-
-            $content = preg_replace_callback(
-                $pattern,
-                function ($matches) use ($finalUrl) {
-                    $originalUrl = html_entity_decode($matches[3]); // Decode entities before resolving
-                    if (preg_match('/^(data:|([a-z][a-z0-9+-.]*):|\/\/|#)/i', $originalUrl) || empty(trim($originalUrl))) {
-                        return $matches[0]; 
-                    }
-                    $absoluteUrl = make_absolute($originalUrl, $finalUrl);
-                    return $matches[1] . $matches[2] . htmlspecialchars($absoluteUrl, ENT_QUOTES, 'UTF-8') . $matches[4];
-                },
-                $content
-            );
+            if ($attr === 'srcset') {
+                // Special handling for srcset: rewrite each URL in the set
+                 $content = preg_replace_callback(
+                    '/(<[^>]+srcset\s*=\s*)([\'"]?)([^"\'<>]+)([\'"]?)/i',
+                    function ($matches) use ($finalUrl, $proxyUrlPrefix) {
+                        $srcset_values = explode(',', $matches[3]);
+                        $new_srcset_values = [];
+                        foreach ($srcset_values as $value_pair) {
+                            $parts = preg_split('/\s+/', trim($value_pair));
+                            $url_part = trim($parts[0]);
+                            $descriptor_part = isset($parts[1]) ? ' ' . trim($parts[1]) : '';
+                            
+                            if (preg_match('/^(data:|([a-z][a-z0-9+-.]*):|\/\/|#)/i', $url_part) || empty(trim($url_part))) {
+                                $new_srcset_values[] = $url_part . $descriptor_part;
+                            } else {
+                                $absoluteUrl = make_absolute($url_part, $finalUrl);
+                                $new_srcset_values[] = htmlspecialchars($proxyUrlPrefix . urlencode($absoluteUrl), ENT_QUOTES, 'UTF-8') . $descriptor_part;
+                            }
+                        }
+                        return $matches[1] . $matches[2] . implode(', ', $new_srcset_values) . $matches[4];
+                    },
+                    $content
+                );
+            } else {
+                // Standard attribute URL rewriting (links through proxy)
+                $pattern = '/(<[^>]+' . preg_quote($attr, '/') . '\s*=\s*)([\'"]?)([^"\'\s#<>][^"\'\s<>]*|[^"\'\s<>]*\?[^"\'\s<>]*|[^"\'\s<>]*#[^"\'\s<>]*)([\'"]?)/i';
+                $content = preg_replace_callback(
+                    $pattern,
+                    function ($matches) use ($finalUrl, $proxyUrlPrefix) {
+                        $originalUrl = html_entity_decode($matches[3]); 
+                        if (preg_match('/^(data:|([a-z][a-z0-9+-.]*):|\/\/|#)/i', $originalUrl) || empty(trim($originalUrl))) {
+                            return $matches[0]; 
+                        }
+                        $absoluteUrl = make_absolute($originalUrl, $finalUrl);
+                        // All proxied resources should go through the proxy script again
+                        return $matches[1] . $matches[2] . htmlspecialchars($proxyUrlPrefix . urlencode($absoluteUrl), ENT_QUOTES, 'UTF-8') . $matches[4];
+                    },
+                    $content
+                );
+            }
         }
         
-        // Rewrite URLs in inline style="... url(...)"
+        // Rewrite URLs in inline style="... url(...)" (links through proxy)
         $content = preg_replace_callback(
             '/(url\s*\(\s*)([\'"]?)([^"\'\)\s#<>][^"\'\)\s<>]*|[^"\'\)\s<>]*\?[^"\'\)\s<>]*|[^"\'\)\s<>]*#[^"\'\)\s<>]*)([\'"]?)(\s*\))/i',
-            function ($matches) use ($finalUrl) {
-                $originalUrl = html_entity_decode($matches[3]); // Decode entities
+            function ($matches) use ($finalUrl, $proxyUrlPrefix) {
+                $originalUrl = html_entity_decode($matches[3]);
                 if (preg_match('/^(data:|([a-z][a-z0-9+-.]*):|\/\/|#)/i', $originalUrl) || empty(trim($originalUrl))) {
                     return $matches[0]; 
                 }
                 $absoluteUrl = make_absolute($originalUrl, $finalUrl);
-                return $matches[1] . $matches[2] . htmlspecialchars($absoluteUrl, ENT_QUOTES, 'UTF-8') . $matches[4] . $matches[5];
+                return $matches[1] . $matches[2] . htmlspecialchars($proxyUrlPrefix . urlencode($absoluteUrl), ENT_QUOTES, 'UTF-8') . $matches[4] . $matches[5];
             },
             $content
         );
 
-        // Rewrite URLs in <script> tags (simple string replacement, might be fragile)
-        // This is highly experimental and can break scripts. Use with caution.
-        // Example: proxy.php?url=...
-        $proxyUrlPrefix = htmlspecialchars((isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://$_SERVER[HTTP_HOST]$_SERVER[SCRIPT_NAME]?url=", ENT_QUOTES, 'UTF-8');
-        
-        // Looking for fetch('relative/path') or new XMLHttpRequest().open('GET', 'relative/path')
-        // This part is complex and risky. A simple example for fetch:
+
+        // Rewrite URLs within <script> tags to go through the proxy if they are relative
+        // This is complex and can break scripts, but necessary for some dynamic sites.
+        // It tries to catch common patterns like fetch('relative/path'), xhr.open('GET', 'relative/path'), location.href = 'relative/path'
         $content = preg_replace_callback(
-            '/(fetch\s*\(\s*)([\'"])([^"\'#:\s][^\'"]*)([\'"]\s*)/i', // Matches fetch('path') or fetch("path") where path is relative
-            function ($matches) use ($finalUrl, $proxyUrlPrefix) {
-                $originalUrl = html_entity_decode($matches[3]);
-                 if (preg_match('/^(data:|([a-z][a-z0-9+-.]*):|\/\/|#)/i', $originalUrl)) { // if already absolute, data URI or scheme relative
-                    return $matches[0]; 
+            '/(<script\b[^>]*>)(.*?)(<\/script>)/is', // Process content of each script tag
+            function ($script_matches) use ($finalUrl, $proxyUrlPrefix) {
+                $script_content = $script_matches[2];
+
+                // Pattern for fetch, XHR open, and location assignments with relative URLs
+                // Looks for (fetch|open|location\s*(=|\.href\s*=))\s*\(\s*['"]([^'"#:\s][^'"]*)['"]
+                // Or location.href = 'relative/path'
+                $js_patterns = [
+                    // fetch('relative/path') or fetch("relative/path")
+                    '/(fetch\s*\(\s*)([\'"])([^"\'#:\s][^\'"]*?)([\'"]\s*[,\)])/i',
+                    // new XMLHttpRequest().open('GET', 'relative/path')
+                    '/((?:xhr|xmlHttpRequest|new XMLHttpRequest\(\))\s*\.\s*open\s*\(\s*[\'"][A-Z]+[\'"]\s*,\s*)([\'"])([^"\'#:\s][^\'"]*?)([\'"]\s*)/i',
+                    // location.href = 'relative/path' or location = 'relative/path'
+                    '/(location\s*(?:\.href\s*)?\s*=\s*)([\'"])([^"\'#:\s][^\'"]*?)([\'"])/i'
+                ];
+
+                foreach ($js_patterns as $pattern) {
+                    $script_content = preg_replace_callback(
+                        $pattern,
+                        function ($matches) use ($finalUrl, $proxyUrlPrefix) {
+                            $originalUrl = $matches[3]; // The relative URL path
+                            // If it already looks absolute, data URI, or fragment, skip.
+                            if (preg_match('/^(data:|([a-z][a-z0-9+-.]*):|\/\/|#)/i', $originalUrl) || strpos($originalUrl, $proxyUrlPrefix) === 0) {
+                                return $matches[0]; 
+                            }
+                            $absoluteUrl = make_absolute($originalUrl, $finalUrl);
+                            $proxiedJsUrl = $proxyUrlPrefix . urlencode($absoluteUrl);
+                            // Reconstruct the JS call with the proxied URL
+                            // $matches[1] is prefix, $matches[2] is quote, $matches[4] is suffix
+                            return $matches[1] . $matches[2] . $proxiedJsUrl . $matches[4];
+                        },
+                        $script_content
+                    );
                 }
-                $absoluteUrl = make_absolute($originalUrl, $finalUrl);
-                // Instead of proxying AJAX calls through this PHP script again (which can cause loops or complexity),
-                // let's try to make them absolute if they were relative.
-                // return $matches[1] . $matches[2] . htmlspecialchars($proxyUrlPrefix . urlencode($absoluteUrl), ENT_QUOTES, 'UTF-8') . $matches[4];
-                return $matches[1] . $matches[2] . htmlspecialchars($absoluteUrl, ENT_QUOTES, 'UTF-8') . $matches[4];
+                return $script_matches[1] . $script_content . $script_matches[3];
             },
             $content
         );
-
 
     }
-    // For non-HTML content, pass it through as is. Client-side script might not render it.
 
     sendJsonResponse([
         'success' => true, 
         'content' => $content, 
         'statusCode' => $statusCode, 
-        'finalUrl' => htmlspecialchars($finalUrl, ENT_QUOTES, 'UTF-8'), // For display
-        'rawFinalUrl' => $finalUrl, // For JS logic
+        'finalUrl' => htmlspecialchars($finalUrl, ENT_QUOTES, 'UTF-8'), 
+        'rawFinalUrl' => $finalUrl, 
         'contentType' => $contentType
     ]);
 
 } else {
-    $httpErrorCode = ($statusCode == 0 || $statusCode >= 500) ? 502 : $statusCode; // 502 for network/upstream errors
+    $httpErrorCode = ($statusCode == 0 || $statusCode >= 500) ? 502 : $statusCode; 
     
     $errorMsg = "Failed to fetch content. The remote server responded with status: $statusCode.";
-    if ($statusCode === 0 && empty($curlError)) { // $curlError check is important
+    if ($statusCode === 0 && empty($curlError)) { 
         $errorMsg = "Failed to fetch content. Could not connect to the server, the URL may be invalid, or the target server is not responding.";
-    } else if (!empty($curlError)) { // If curlError is set, it's more specific
+    } else if (!empty($curlError)) { 
         $errorMsg = "cURL Error: " . htmlspecialchars($curlError);
     } else if ($statusCode === 403) {
         $errorMsg .= " Access Forbidden. The target site may be blocking direct access or proxy attempts.";
@@ -360,7 +395,7 @@ if ($statusCode >= 200 && $statusCode < 400) {
         'statusCode' => $statusCode,
         'finalUrl' => htmlspecialchars($finalUrl, ENT_QUOTES, 'UTF-8'),
         'rawFinalUrl' => $finalUrl,
-        'content' => $content // Send back any content received, even on error, for debugging (might be null or HTML error page from target)
+        'content' => $content 
     ], $httpErrorCode);
 }
 ?>

@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const fullscreenButton = document.getElementById('fullscreen-button');
     const currentYearSpan = document.getElementById('current-year');
 
-    let currentFetchedBaseUrl = ''; // Store the base URL of the currently displayed content
+    let currentFetchedBaseUrl = ''; 
 
     if (currentYearSpan) {
         currentYearSpan.textContent = new Date().getFullYear();
@@ -25,11 +25,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         hideError();
         showLoader();
-        // Do not hide contentViewer immediately, allow for smooth transition if content is already shown
-        // contentViewer.style.display = 'none'; 
         fetchButton.disabled = true;
         fetchButton.textContent = 'Loading...';
-        urlInput.value = urlToFetch; // Update input field with the URL being fetched
+        urlInput.value = urlToFetch;
 
         try {
             const response = await fetch(`proxy.php?url=${encodeURIComponent(urlToFetch)}`);
@@ -51,27 +49,49 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 showError(proxyErrorText);
                 console.error("Proxy response error object:", response);
-                currentFetchedBaseUrl = ''; // Reset base URL on error
+                currentFetchedBaseUrl = ''; 
                 return; 
             }
             
             const result = await response.json();
 
-            if (result.success && result.content !== undefined) { // Check for content specifically
+            if (result.success && result.content !== undefined) {
                 contentDisplay.innerHTML = result.content;
+                // Sanitize script tags to prevent execution of potentially harmful scripts from the proxy
+                // This is a basic measure; a more robust solution would involve a proper HTML sanitizer library
+                // or more sophisticated server-side processing.
+                Array.from(contentDisplay.getElementsByTagName("script")).forEach(oldScript => {
+                    const newScript = document.createElement("script");
+                    Array.from(oldScript.attributes).forEach(attr => newScript.setAttribute(attr.name, attr.value));
+                    // Only re-insert script text if it's deemed "safe" or necessary.
+                    // For now, we are allowing scripts but they are re-evaluated by the browser.
+                    // To prevent execution of *all* scripts from proxied content:
+                    // oldScript.parentNode.removeChild(oldScript); // And don't append newScript
+                    // However, this breaks most interactive sites.
+                    if (oldScript.src) {
+                        // If script has src, it's already handled by proxy.php's URL rewriting (if relative)
+                        // or it's absolute. We just recreate the element.
+                         newScript.appendChild(document.createTextNode(oldScript.innerHTML)); // keep inline content if any, though unusual for src scripts
+                         oldScript.parentNode.replaceChild(newScript, oldScript);
+
+                    } else if (oldScript.innerHTML) {
+                        // For inline scripts, the server-side rewriting in proxy.php is primary.
+                        // Re-creating the script tag helps ensure it's "fresh" in the DOM if needed.
+                        newScript.appendChild(document.createTextNode(oldScript.innerHTML));
+                        oldScript.parentNode.replaceChild(newScript, oldScript);
+                    }
+                });
+
+
                 contentViewer.style.display = 'block';
                 contentTitle.textContent = `Content Preview`;
                 
-                currentFetchedBaseUrl = result.rawFinalUrl || urlToFetch; // Store the raw final URL
-                const displayUrl = result.finalUrl || urlToFetch; // Use HTML-escaped version for display
+                currentFetchedBaseUrl = result.rawFinalUrl || urlToFetch; 
+                const displayUrl = result.finalUrl || urlToFetch; 
                 
                 currentUrlDisplay.textContent = `Displaying: ${displayUrl}`;
                 currentUrlDisplay.title = `Displaying: ${displayUrl}`;
-
-                // Re-attach listeners for dynamic content
-                attachDynamicContentListeners();
                 
-                // Scroll to top of content viewer or content display
                 contentViewer.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
             } else {
@@ -83,7 +103,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     errorText += ` Attempted URL: ${result.finalUrl}`;
                 }
                 showError(errorText);
-                currentFetchedBaseUrl = result.rawFinalUrl || ''; // Store or reset base URL on error
+                currentFetchedBaseUrl = result.rawFinalUrl || ''; 
             }
         } catch (e) {
             console.error('Fetch or JSON parsing error:', e);
@@ -94,7 +114,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 friendlyMessage = 'Error processing server response. The proxy might have returned an invalid format. Check browser console.';
             }
             showError(friendlyMessage);
-            currentFetchedBaseUrl = ''; // Reset base URL on error
+            currentFetchedBaseUrl = ''; 
         } finally {
             hideLoader();
             fetchButton.disabled = false;
@@ -107,29 +127,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const url = urlInput.value.trim();
         fetchAndDisplayUrl(url);
     });
-
-    function attachDynamicContentListeners() {
-        // Clear previous listeners if any more robustly (though simple re-assignment is often fine)
-        // For this app, directly re-assigning might be okay, but for more complex scenarios, consider event delegation on contentDisplay
-
-        contentDisplay.querySelectorAll('a').forEach(link => {
-            link.addEventListener('click', handleLinkClick);
-        });
-
-        contentDisplay.querySelectorAll('form').forEach(form => {
-            form.addEventListener('submit', handleFormSubmit);
-        });
-    }
     
     function resolveUrl(relativeUrl, base) {
-        if (!base) { // if currentFetchedBaseUrl is empty, try to use the input field or current document
+        if (!base) { 
             base = urlInput.value.trim() || document.location.href;
         }
         try {
             return new URL(relativeUrl, base).href;
         } catch (e) {
             console.warn("Could not resolve URL:", relativeUrl, "with base:", base, "Error:", e);
-            // Fallback for malformed relative URLs or bases
             if (relativeUrl.startsWith('//')) {
                 return new URL(document.location.protocol + relativeUrl).href;
             }
@@ -137,65 +143,83 @@ document.addEventListener('DOMContentLoaded', () => {
                 const baseObj = new URL(base);
                 return baseObj.origin + relativeUrl;
             }
-            // If it's a full URL already or other cases, return as is or with minimal change
             return relativeUrl;
         }
     }
 
-    function handleLinkClick(event) {
-        const link = event.currentTarget;
-        let href = link.getAttribute('href');
+    contentDisplay.addEventListener('click', function(event) {
+        const link = event.target.closest('a');
+        if (link) {
+            let href = link.getAttribute('href');
 
-        if (!href || href.trim() === '' || href.startsWith('javascript:')) {
-            return; // Do nothing for empty or javascript links
-        }
-
-        event.preventDefault(); // Prevent default navigation
-
-        if (href.startsWith('#')) {
-            // Handle same-page anchor links
-            const targetId = href.substring(1);
-            const targetElement = contentDisplay.querySelector(`#${CSS.escape(targetId)}`);
-            if (targetElement) {
-                targetElement.scrollIntoView({ behavior: 'smooth' });
-            } else {
-                // Fallback: scroll to top of contentDisplay if specific fragment not found
-                contentDisplay.scrollTop = 0; 
+            if (!href || href.trim() === '') {
+                event.preventDefault(); // Prevent action for empty hrefs
+                return;
             }
-            return;
+            if (href.startsWith('javascript:')) {
+                console.warn('Javascript link clicked, execution prevented by proxy viewer.', link);
+                event.preventDefault(); // Prevent execution of javascript: links
+                return; 
+            }
+
+            // Allow default behavior for links with target="_blank" or if it's an external link not to be proxied
+            // For this proxy, we want to proxy most things. If it has target="_blank", the proxy can't easily control new tabs.
+            // So we navigate all links within the viewer for simplicity.
+            event.preventDefault(); 
+
+            if (href.startsWith('#')) {
+                const targetId = href.substring(1);
+                let targetElement = null;
+                try {
+                    // CSS.escape is important for IDs that might contain special characters
+                    targetElement = contentDisplay.querySelector(`#${CSS.escape(targetId)}`);
+                } catch(e) {
+                    console.warn("Error finding fragment:", e);
+                    // Try a simpler query if CSS.escape failed or wasn't needed
+                    try { targetElement = contentDisplay.querySelector(href); } catch (e2) {}
+                }
+                if (targetElement) {
+                    targetElement.scrollIntoView({ behavior: 'smooth' });
+                } else {
+                    contentDisplay.scrollTop = 0; 
+                }
+                return;
+            }
+
+            const absoluteUrl = resolveUrl(href, currentFetchedBaseUrl);
+            fetchAndDisplayUrl(absoluteUrl);
         }
+    });
 
-        const absoluteUrl = resolveUrl(href, currentFetchedBaseUrl);
-        fetchAndDisplayUrl(absoluteUrl);
-    }
+    contentDisplay.addEventListener('submit', function(event) {
+        const form = event.target.closest('form');
+        if (form) {
+            event.preventDefault();
+            const action = form.getAttribute('action') || ''; // Default to empty string if no action
+            const method = form.method ? form.method.toLowerCase() : 'get';
 
-    function handleFormSubmit(event) {
-        event.preventDefault();
-        const form = event.currentTarget;
-        const action = form.getAttribute('action') || '';
-        const method = form.method ? form.method.toLowerCase() : 'get';
+            // Resolve action URL against the base URL of the fetched content
+            let targetUrl = resolveUrl(action, currentFetchedBaseUrl);
 
-        let targetUrl = resolveUrl(action, currentFetchedBaseUrl);
+            const formData = new FormData(form);
+            const params = new URLSearchParams();
+            for (const pair of formData) {
+                params.append(pair[0], pair[1]);
+            }
+            
+            if (method === 'post') {
+                // The current proxy.php converts all requests to GET.
+                // If proxy.php were to support POST, we'd need to send data differently.
+                showError("Warning: POST forms are submitted as GET through this proxy. Functionality may differ.", "warning");
+            }
 
-        const formData = new FormData(form);
-        const params = new URLSearchParams();
-        for (const pair of formData) {
-            params.append(pair[0], pair[1]);
+            if (params.toString()) {
+                targetUrl += (targetUrl.includes('?') ? '&' : '?') + params.toString();
+            }
+            
+            fetchAndDisplayUrl(targetUrl);
         }
-        
-        if (method === 'post') {
-            // Our current PHP proxy converts everything to GET. 
-            // For POST, we'd need to send data in the body, which proxy.php isn't set up for.
-            // For now, we'll append as query params (like a GET) and warn.
-            showError("Warning: POST forms are submitted as GET through this proxy. Functionality may differ.", "warning");
-        }
-
-        if (params.toString()) {
-            targetUrl += (targetUrl.includes('?') ? '&' : '?') + params.toString();
-        }
-        
-        fetchAndDisplayUrl(targetUrl);
-    }
+    });
 
 
     fullscreenButton.addEventListener('click', () => {
@@ -223,6 +247,15 @@ document.addEventListener('DOMContentLoaded', () => {
             fullscreenButton.textContent = 'Fullscreen';
         }
     });
+    // Safari specific fullscreen change event
+    document.addEventListener('webkitfullscreenchange', () => {
+         if (document.webkitFullscreenElement === contentDisplay) {
+            fullscreenButton.textContent = 'Exit Fullscreen';
+        } else {
+            fullscreenButton.textContent = 'Fullscreen';
+        }
+    });
+
 
     function showLoader() {
         loader.style.display = 'block';
@@ -232,7 +265,7 @@ document.addEventListener('DOMContentLoaded', () => {
         loader.style.display = 'none';
     }
 
-    function showError(message, type = "error") { // type can be "error" or "warning"
+    function showError(message, type = "error") { 
         errorMessageDiv.textContent = message;
         errorMessageDiv.style.display = 'block';
         errorMessageDiv.className = `error-message ${type === 'warning' ? 'warning-message' : ''}`;
@@ -245,6 +278,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function hideError() {
         errorMessageDiv.style.display = 'none';
-        errorMessageDiv.className = 'error-message'; // Reset class
+        errorMessageDiv.className = 'error-message'; 
     }
 });
