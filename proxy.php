@@ -244,7 +244,7 @@ curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
 curl_setopt($ch, CURLOPT_MAXREDIRS, 10); 
 curl_setopt($ch, CURLOPT_TIMEOUT, 60); 
-curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 UnblockMeProxy/1.3'); 
+curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 UnblockMeProxy/1.4'); 
 curl_setopt($ch, CURLOPT_ENCODING, ""); // Allow cURL to handle gzip, deflate, etc.
 
 // Try to use TLS 1.2 or higher if available/defined
