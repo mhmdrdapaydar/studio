@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UnblockMe</title>
+    <link rel="stylesheet" href="public/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>UnblockMe</h1>
+            <p>Access and view content from any website. Enter a URL below.</p>
+        </header>
+
+        <section class="input-section">
+            <form id="url-form">
+                <input type="text" id="url-input" placeholder="e.g., example.com or https://example.com" aria-label="Website URL">
+                <button type="submit" id="fetch-button">Fetch & View</button>
+            </form>
+            <div id="loader" class="loader" style="display: none;">Loading...</div>
+            <div id="error-message" class="error-message" style="display: none;"></div>
+        </section>
+
+        <section id="content-viewer" class="content-viewer" style="display: none;">
+            <div class="content-header">
+                <h2 id="content-title">Content Preview</h2>
+                <p id="current-url-display" class="current-url-display"></p>
+                <button id="fullscreen-button" aria-label="Toggle Fullscreen">Fullscreen</button>
+            </div>
+            <div id="content-display" class="content-display">
+                <!-- Fetched content will be displayed here -->
+            </div>
+            <div class="content-footer">
+                <p>Content is displayed as fetched. Some styles or scripts might not render correctly.</p>
+            </div>
+        </section>
+    </div>
+
+    <footer>
+        <p>&copy; <span id="current-year"></span> UnblockMe. All rights reserved.</p>
+        <p>This service is for accessing publicly available content. Please use responsibly.</p>
+    </footer>
+
+    <script src="public/js/script.js"></script>
+</body>
+</html>
